@@ -1,0 +1,10 @@
+{
+  "title": "Chadconda",
+  "description": "Le snake en pleine prise de masse : mange du poulet et des shakers de protéines, grossis sans te mordre la queue.",
+  "author": "ChadGang",
+  "category": "Solo",
+  "emoji": "🐍",
+  "image": "cover.png",
+  "classement": "score",
+  "unite": "pts"
+}
