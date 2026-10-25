@@ -48,23 +48,31 @@ canvas{display:block;touch-action:none}
 #confetti{position:absolute;inset:0;pointer-events:none;width:100%;height:100%}
 #cv{border:4px solid var(--ink);border-radius:20px;box-shadow:7px 7px 0 #0a0a33;margin-top:60px}
 
+#wrapc{display:flex;flex-direction:column;align-items:center;gap:14px}
+#pad{display:none;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,52px);gap:6px}
+#pad button{font:900 22px system-ui;border:3px solid var(--ink);border-radius:16px;background:#fff;color:var(--ink);box-shadow:3px 3px 0 var(--ink);touch-action:none}
+#pad button:active,#pad button.on{background:var(--sun);transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+#pad button[data-d="0,-1"]{grid-column:2;grid-row:1}#pad button[data-d="-1,0"]{grid-column:1;grid-row:2}#pad button[data-d="1,0"]{grid-column:3;grid-row:2}#pad button[data-d="0,1"]{grid-column:2;grid-row:3}
+@media (pointer:coarse){#pad{display:grid}#cv{margin-top:56px}}
+@media (pointer:coarse){.hint{bottom:auto;top:13%}}
+
 </style>
 </head>
 <body>
-<div id="stage"><canvas id="cv"></canvas></div>
+<div id="stage"><div id="wrapc"><canvas id="cv"></canvas><div id="pad"><button data-d="0,-1" aria-label="Haut">▲</button><button data-d="-1,0" aria-label="Gauche">◀</button><button data-d="1,0" aria-label="Droite">▶</button><button data-d="0,1" aria-label="Bas">▼</button></div></div></div>
 <div class="ui">
   <canvas id="confetti"></canvas>
   <div id="score" class="hide">0</div>
   <div id="target" class="hide"><span></span></div>
   <div id="top"><button class="btn" id="mute" title="Son">🔊</button></div>
   <div id="flash"></div>
-  <div class="hint hide" id="hint"><span>Glisse ou utilise les flèches pour tourner</span></div>
+  <div class="hint hide" id="hint"><span>Glisse le doigt ou utilise la croix pour tourner</span></div>
   <div class="panel" id="menu">
     <div class="title">CHAD<br>CONDA</div>
     <p class="muted">Le serpent qui fait sa prise de masse. Mange le poulet, évite les murs et ta propre queue.</p>
     <div class="row"><div class="stat"><b id="mBest">0</b><small>ton record</small></div><div class="stat"><b id="mHub">–</b><small id="mHubWho">record du hub</small></div></div>
     <button class="btn primary" id="play">▶ Jouer</button>
-    <p class="muted" style="margin-top:8px;font-size:12px">Flèches / ZQSD, ou glisse avec le doigt</p>
+    <p class="muted" style="margin-top:8px;font-size:12px">Flèches / ZQSD, ou glisse le doigt sur l'écran / utilise la croix</p>
     <div class="lb" id="mLb"></div>
   </div>
   <div class="panel hide" id="over">
@@ -81,6 +89,9 @@ canvas{display:block;touch-action:none}
 'use strict';
 /* ===== Kit commun ChadGang (menus, sons, classement du hub, records) ===== */
 const $=id=>document.getElementById(id);
+// Les gestes servent au jeu : on empêche la page (et le hub autour) de défiler ou de rebondir, sauf dans les menus
+for(const ev of ['touchmove','touchstart'])document.addEventListener(ev,e=>{if(!e.target.closest('.panel,button,#top'))e.preventDefault()},{passive:false});
+document.addEventListener('gesturestart',e=>e.preventDefault());
 const CG=(()=>{
   const cfg={key:'jeu',unit:'',medals:[[10,'🥉','Médaille de bronze'],[25,'🥈','Médaille d\'argent'],[50,'🥇','Médaille d\'or'],[100,'💎','Médaille de diamant !']],lowMsg:'Encore un effort…',onStart(){},fmt:n=>String(n)};
   const HUB=typeof ChadGang!=='undefined';
@@ -154,7 +165,8 @@ const CG=(()=>{
 /* ===== Chadconda ===== */
 const cv=$('cv'),ctx=cv.getContext('2d');
 const N=18;let px=20,dpr=1;
-function resize(){dpr=Math.min(2,devicePixelRatio||1);const s=Math.floor(Math.min(innerWidth-24,innerHeight-150,620)/N);px=Math.max(14,s);cv.width=N*px*dpr;cv.height=N*px*dpr;cv.style.width=N*px+'px';cv.style.height=N*px+'px'}
+const COARSE=matchMedia('(pointer:coarse)').matches;
+function resize(){dpr=Math.min(2,devicePixelRatio||1);const s=Math.floor(Math.min(innerWidth-24,innerHeight-(COARSE?330:150),620)/N);px=Math.max(14,s);cv.width=N*px*dpr;cv.height=N*px*dpr;cv.style.width=N*px+'px';cv.style.height=N*px+'px'}
 addEventListener('resize',resize);resize();
 let prev=[],pdir={x:1,y:0},snake,dir,queue,food,gold,score,tick,acc2,stepMs,parts,dead,deadT,grow,eaten,t=0;
 function reset(){snake=[{x:5,y:9},{x:4,y:9},{x:3,y:9}];prev=snake.map(s=>({...s}));pdir={x:1,y:0};dir={x:1,y:0};queue=[];score=0;stepMs=135;acc2=0;parts=[];dead=false;deadT=0;grow=0;eaten=0;gold=null;placeFood();CG.setScore(0)}
@@ -162,10 +174,19 @@ function free(){const occ=new Set(snake.map(s=>s.x+','+s.y));if(food)occ.add(foo
 function placeFood(){food=free();food.e=Math.random()<.5?'🍗':'🥩'}
 function turn(x,y){if(CG.state!=='play')return;const last=queue.length?queue[queue.length-1]:dir;if(last.x===-x&&last.y===-y||last.x===x&&last.y===y)return;if(queue.length<3)queue.push({x,y})}
 addEventListener('keydown',e=>{const k={ArrowUp:[0,-1],KeyW:[0,-1],KeyZ:[0,-1],ArrowDown:[0,1],KeyS:[0,1],ArrowLeft:[-1,0],KeyA:[-1,0],KeyQ:[-1,0],ArrowRight:[1,0],KeyD:[1,0]}[e.code];if(k){e.preventDefault();turn(k[0],k[1])}});
-let sx,sy,sid=null;
-addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY;sid=e.pointerId});
-addEventListener('pointermove',e=>{if(sid!==e.pointerId)return;const dx=e.clientX-sx,dy=e.clientY-sy;if(Math.max(Math.abs(dx),Math.abs(dy))>22){if(Math.abs(dx)>Math.abs(dy))turn(Math.sign(dx),0);else turn(0,Math.sign(dy));sx=e.clientX;sy=e.clientY}});
-addEventListener('pointerup',()=>{sid=null});
+// Gestes au doigt (événements tactiles natifs : fiables sur iPhone et dans le hub)
+let sx=0,sy=0,tid=null;
+addEventListener('touchstart',e=>{if(e.target.closest('#pad,.panel,button'))return;const t=e.changedTouches[0];tid=t.identifier;sx=t.clientX;sy=t.clientY},{passive:true});
+addEventListener('touchmove',e=>{for(const t of e.changedTouches){if(t.identifier!==tid)continue;const dx=t.clientX-sx,dy=t.clientY-sy;if(Math.max(Math.abs(dx),Math.abs(dy))>18){if(Math.abs(dx)>Math.abs(dy))turn(Math.sign(dx),0);else turn(0,Math.sign(dy));sx=t.clientX;sy=t.clientY}}},{passive:true});
+addEventListener('touchend',()=>{tid=null});
+// Souris (glisser) sur ordinateur
+let mx=0,my=0,md=false;
+addEventListener('mousedown',e=>{md=true;mx=e.clientX;my=e.clientY});addEventListener('mouseup',()=>{md=false});
+addEventListener('mousemove',e=>{if(!md)return;const dx=e.clientX-mx,dy=e.clientY-my;if(Math.max(Math.abs(dx),Math.abs(dy))>22){if(Math.abs(dx)>Math.abs(dy))turn(Math.sign(dx),0);else turn(0,Math.sign(dy));mx=e.clientX;my=e.clientY}});
+// Croix directionnelle
+document.querySelectorAll('#pad button').forEach(b=>{const [x,y]=b.dataset.d.split(',').map(Number);
+  b.addEventListener('pointerdown',e=>{e.preventDefault();b.classList.add('on');if(CG.state!=='play'){return}turn(x,y);CG.sfx.click()});
+  const off=()=>b.classList.remove('on');b.addEventListener('pointerup',off);b.addEventListener('pointerleave',off);b.addEventListener('pointercancel',off)});
 function burst(x,y,c,n){for(let i=0;i<n;i++){const a=Math.random()*7,v=1+Math.random()*3;parts.push({x:(x+.5)*px,y:(y+.5)*px,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:30,c})}}
 function move(){
   prev=snake.map(s=>({...s}));pdir={...dir};
