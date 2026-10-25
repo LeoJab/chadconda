@@ -156,8 +156,8 @@ const cv=$('cv'),ctx=cv.getContext('2d');
 const N=18;let px=20,dpr=1;
 function resize(){dpr=Math.min(2,devicePixelRatio||1);const s=Math.floor(Math.min(innerWidth-24,innerHeight-150,620)/N);px=Math.max(14,s);cv.width=N*px*dpr;cv.height=N*px*dpr;cv.style.width=N*px+'px';cv.style.height=N*px+'px'}
 addEventListener('resize',resize);resize();
-let snake,dir,queue,food,gold,score,tick,acc2,stepMs,parts,dead,deadT,grow,eaten,t=0;
-function reset(){snake=[{x:5,y:9},{x:4,y:9},{x:3,y:9}];dir={x:1,y:0};queue=[];score=0;stepMs=135;acc2=0;parts=[];dead=false;deadT=0;grow=0;eaten=0;gold=null;placeFood();CG.setScore(0)}
+let prev=[],pdir={x:1,y:0},snake,dir,queue,food,gold,score,tick,acc2,stepMs,parts,dead,deadT,grow,eaten,t=0;
+function reset(){snake=[{x:5,y:9},{x:4,y:9},{x:3,y:9}];prev=snake.map(s=>({...s}));pdir={x:1,y:0};dir={x:1,y:0};queue=[];score=0;stepMs=135;acc2=0;parts=[];dead=false;deadT=0;grow=0;eaten=0;gold=null;placeFood();CG.setScore(0)}
 function free(){const occ=new Set(snake.map(s=>s.x+','+s.y));if(food)occ.add(food.x+','+food.y);if(gold)occ.add(gold.x+','+gold.y);const l=[];for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!occ.has(x+','+y))l.push({x,y});return l[Math.random()*l.length|0]}
 function placeFood(){food=free();food.e=Math.random()<.5?'🍗':'🥩'}
 function turn(x,y){if(CG.state!=='play')return;const last=queue.length?queue[queue.length-1]:dir;if(last.x===-x&&last.y===-y||last.x===x&&last.y===y)return;if(queue.length<3)queue.push({x,y})}
@@ -168,6 +168,7 @@ addEventListener('pointermove',e=>{if(sid!==e.pointerId)return;const dx=e.client
 addEventListener('pointerup',()=>{sid=null});
 function burst(x,y,c,n){for(let i=0;i<n;i++){const a=Math.random()*7,v=1+Math.random()*3;parts.push({x:(x+.5)*px,y:(y+.5)*px,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:30,c})}}
 function move(){
+  prev=snake.map(s=>({...s}));pdir={...dir};
   if(queue.length)dir=queue.shift();
   const h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
   const willGrow=grow>0||(h.x===food.x&&h.y===food.y)||(gold&&h.x===gold.x&&h.y===gold.y);
@@ -198,14 +199,17 @@ function draw(){
   // serpent
   const n=snake.length;
   ctx.lineCap='round';ctx.lineJoin='round';
-  const path=()=>{ctx.beginPath();snake.forEach((s,i)=>{const X=(s.x+.5)*px,Y=(s.y+.5)*px;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y)})};
+  // position lissée entre deux cases (le serpent glisse au lieu d'avancer par à-coups)
+  const P=snake.map((s,i)=>{const a=prev[i]||prev[prev.length-1]||s;return{x:a.x+(s.x-a.x)*k,y:a.y+(s.y-a.y)*k}});
+  const pts=[];P.forEach((q,i)=>{pts.push(q);if(i<snake.length-1)pts.push(snake[i+1]) /* passe par le centre de la case : virages propres */});
+  const path=()=>{ctx.beginPath();pts.forEach((q,i)=>{const X=(q.x+.5)*px,Y=(q.y+.5)*px;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y)})};
   path();ctx.strokeStyle='#12102b';ctx.lineWidth=px*.82+5;ctx.stroke();
   path();ctx.strokeStyle='#2ee6a6';ctx.lineWidth=px*.82;ctx.stroke();
   // rayures
-  for(let i=1;i<n;i+=2){const s=snake[i];ctx.fillStyle='#1fbf88';ctx.beginPath();ctx.arc((s.x+.5)*px,(s.y+.5)*px,px*.22,0,7);ctx.fill()}
-  {const s=snake[0];ctx.fillStyle='#2ee6a6';ctx.strokeStyle='#12102b';ctx.lineWidth=2.5;rr(s.x*px-1,s.y*px-1,px+2,px+2,px*.35);ctx.fill();ctx.stroke()}
+  for(let i=1;i<n;i+=2){const s=P[i];ctx.fillStyle='#1fbf88';ctx.beginPath();ctx.arc((s.x+.5)*px,(s.y+.5)*px,px*.22,0,7);ctx.fill()}
+  {const s=P[0];ctx.fillStyle='#2ee6a6';ctx.strokeStyle='#12102b';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc((s.x+.5)*px,(s.y+.5)*px,px*.56,0,7);ctx.fill();ctx.stroke()}
   // tête : lunettes + mâchoire
-  const h=snake[0],cxh=(h.x+.5)*px,cyh=(h.y+.5)*px;ctx.save();ctx.translate(cxh,cyh);ctx.rotate(Math.atan2(dir.y,dir.x));
+  const h=P[0],cxh=(h.x+.5)*px,cyh=(h.y+.5)*px;ctx.save();ctx.translate(cxh,cyh);let a0=Math.atan2(pdir.y,pdir.x),a1=Math.atan2(snake[0].y-(prev[0]||snake[0]).y,snake[0].x-(prev[0]||snake[0]).x);let da=a1-a0;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;ctx.rotate(a0+da*Math.min(1,k*1.6));
   ctx.fillStyle='#12102b';rr(px*.02,-px*.32,px*.28,px*.24,3);ctx.fill();rr(px*.02,px*.08,px*.28,px*.24,3);ctx.fill();ctx.fillRect(px*.1,-px*.1,px*.06,px*.2);
   if(t%40<20){ctx.fillStyle='#ff4f6d';ctx.fillRect(px*.48,-px*.04,px*.22,px*.08)}
   ctx.restore();
