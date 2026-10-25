@@ -49,7 +49,7 @@ canvas{display:block;touch-action:none}
 #cv{border:4px solid var(--ink);border-radius:20px;box-shadow:7px 7px 0 #0a0a33;margin-top:60px}
 
 #wrapc{display:flex;flex-direction:column;align-items:center;gap:14px}
-#pad{display:none;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,52px);gap:6px}
+#pad{display:none;grid-template-columns:repeat(3,76px);grid-template-rows:repeat(3,60px);gap:6px}
 #pad button{font:900 22px system-ui;border:3px solid var(--ink);border-radius:16px;background:#fff;color:var(--ink);box-shadow:3px 3px 0 var(--ink);touch-action:none}
 #pad button:active,#pad button.on{background:var(--sun);transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
 #pad button[data-d="0,-1"]{grid-column:2;grid-row:1}#pad button[data-d="-1,0"]{grid-column:1;grid-row:2}#pad button[data-d="1,0"]{grid-column:3;grid-row:2}#pad button[data-d="0,1"]{grid-column:2;grid-row:3}
@@ -166,13 +166,15 @@ const CG=(()=>{
 const cv=$('cv'),ctx=cv.getContext('2d');
 const N=18;let px=20,dpr=1;
 const COARSE=matchMedia('(pointer:coarse)').matches;
-function resize(){dpr=Math.min(2,devicePixelRatio||1);const s=Math.floor(Math.min(innerWidth-24,innerHeight-(COARSE?330:150),620)/N);px=Math.max(14,s);cv.width=N*px*dpr;cv.height=N*px*dpr;cv.style.width=N*px+'px';cv.style.height=N*px+'px'}
+function resize(){dpr=Math.min(2,devicePixelRatio||1);const s=Math.floor(Math.min(innerWidth-24,innerHeight-(COARSE?360:150),620)/N);px=Math.max(14,s);cv.width=N*px*dpr;cv.height=N*px*dpr;cv.style.width=N*px+'px';cv.style.height=N*px+'px'}
 addEventListener('resize',resize);resize();
-let prev=[],pdir={x:1,y:0},snake,dir,queue,food,gold,score,tick,acc2,stepMs,parts,dead,deadT,grow,eaten,t=0;
-function reset(){snake=[{x:5,y:9},{x:4,y:9},{x:3,y:9}];prev=snake.map(s=>({...s}));pdir={x:1,y:0};dir={x:1,y:0};queue=[];score=0;stepMs=135;acc2=0;parts=[];dead=false;deadT=0;grow=0;eaten=0;gold=null;placeFood();CG.setScore(0)}
+let headA=0,prev=[],pdir={x:1,y:0},snake,dir,queue,food,gold,score,tick,acc2,stepMs,parts,dead,deadT,grow,eaten,t=0;
+function reset(){snake=[{x:5,y:9},{x:4,y:9},{x:3,y:9}];prev=snake.map(s=>({...s}));pdir={x:1,y:0};headA=0;dir={x:1,y:0};queue=[];score=0;stepMs=135;acc2=0;parts=[];dead=false;deadT=0;grow=0;eaten=0;gold=null;placeFood();CG.setScore(0)}
 function free(){const occ=new Set(snake.map(s=>s.x+','+s.y));if(food)occ.add(food.x+','+food.y);if(gold)occ.add(gold.x+','+gold.y);const l=[];for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!occ.has(x+','+y))l.push({x,y});return l[Math.random()*l.length|0]}
 function placeFood(){food=free();food.e=Math.random()<.5?'🍗':'🥩'}
-function turn(x,y){if(CG.state!=='play')return;const last=queue.length?queue[queue.length-1]:dir;if(last.x===-x&&last.y===-y||last.x===x&&last.y===y)return;if(queue.length<3)queue.push({x,y})}
+function turn(x,y){if(CG.state!=='play'||dead)return;const last=queue.length?queue[queue.length-1]:dir;if(last.x===-x&&last.y===-y||last.x===x&&last.y===y)return;if(queue.length<3)queue.push({x,y});
+  // tout début de pas : on tourne immédiatement au lieu d'attendre la case suivante
+  if(queue.length===1&&acc2<stepMs*.25){dir=queue.shift()}}
 addEventListener('keydown',e=>{const k={ArrowUp:[0,-1],KeyW:[0,-1],KeyZ:[0,-1],ArrowDown:[0,1],KeyS:[0,1],ArrowLeft:[-1,0],KeyA:[-1,0],KeyQ:[-1,0],ArrowRight:[1,0],KeyD:[1,0]}[e.code];if(k){e.preventDefault();turn(k[0],k[1])}});
 // Gestes au doigt (événements tactiles natifs : fiables sur iPhone et dans le hub)
 let sx=0,sy=0,tid=null;
@@ -185,7 +187,8 @@ addEventListener('mousedown',e=>{md=true;mx=e.clientX;my=e.clientY});addEventLis
 addEventListener('mousemove',e=>{if(!md)return;const dx=e.clientX-mx,dy=e.clientY-my;if(Math.max(Math.abs(dx),Math.abs(dy))>22){if(Math.abs(dx)>Math.abs(dy))turn(Math.sign(dx),0);else turn(0,Math.sign(dy));mx=e.clientX;my=e.clientY}});
 // Croix directionnelle
 document.querySelectorAll('#pad button').forEach(b=>{const [x,y]=b.dataset.d.split(',').map(Number);
-  b.addEventListener('pointerdown',e=>{e.preventDefault();b.classList.add('on');if(CG.state!=='play'){return}turn(x,y);CG.sfx.click()});
+  const press=e=>{e.preventDefault();b.classList.add('on');if(CG.state!=='play')return;turn(x,y);try{navigator.vibrate&&navigator.vibrate(8)}catch{}};
+  b.addEventListener('touchstart',press,{passive:false});b.addEventListener('mousedown',press);b.addEventListener('touchend',()=>b.classList.remove('on'));
   const off=()=>b.classList.remove('on');b.addEventListener('pointerup',off);b.addEventListener('pointerleave',off);b.addEventListener('pointercancel',off)});
 function burst(x,y,c,n){for(let i=0;i<n;i++){const a=Math.random()*7,v=1+Math.random()*3;parts.push({x:(x+.5)*px,y:(y+.5)*px,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:30,c})}}
 function move(){
@@ -221,8 +224,11 @@ function draw(){
   const n=snake.length;
   ctx.lineCap='round';ctx.lineJoin='round';
   // position lissée entre deux cases (le serpent glisse au lieu d'avancer par à-coups)
-  const P=snake.map((s,i)=>{const a=prev[i]||prev[prev.length-1]||s;return{x:a.x+(s.x-a.x)*k,y:a.y+(s.y-a.y)*k}});
-  const pts=[];P.forEach((q,i)=>{pts.push(q);if(i<snake.length-1)pts.push(snake[i+1]) /* passe par le centre de la case : virages propres */});
+  // Rendu « en avance » : chaque segment glisse vers sa prochaine case. La tête part tout de suite vers la direction
+  // demandée (même si le virage n'est appliqué qu'à la case suivante) : la commande paraît instantanée.
+  const nd=queue[0]||dir,n0=snake.length;
+  const P=snake.map((s,i)=>{const tg=i===0?{x:s.x+nd.x,y:s.y+nd.y}:(i===n0-1&&grow>0)?s:snake[i-1];return{x:s.x+(tg.x-s.x)*k,y:s.y+(tg.y-s.y)*k}});
+  const pts=[];P.forEach((q,i)=>{pts.push(q);if(i<snake.length-1)pts.push(snake[i]) /* passe par le centre de la case : virages propres */});
   const path=()=>{ctx.beginPath();pts.forEach((q,i)=>{const X=(q.x+.5)*px,Y=(q.y+.5)*px;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y)})};
   path();ctx.strokeStyle='#12102b';ctx.lineWidth=px*.82+5;ctx.stroke();
   path();ctx.strokeStyle='#2ee6a6';ctx.lineWidth=px*.82;ctx.stroke();
@@ -230,7 +236,7 @@ function draw(){
   for(let i=1;i<n;i+=2){const s=P[i];ctx.fillStyle='#1fbf88';ctx.beginPath();ctx.arc((s.x+.5)*px,(s.y+.5)*px,px*.22,0,7);ctx.fill()}
   {const s=P[0];ctx.fillStyle='#2ee6a6';ctx.strokeStyle='#12102b';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc((s.x+.5)*px,(s.y+.5)*px,px*.56,0,7);ctx.fill();ctx.stroke()}
   // tête : lunettes + mâchoire
-  const h=P[0],cxh=(h.x+.5)*px,cyh=(h.y+.5)*px;ctx.save();ctx.translate(cxh,cyh);let a0=Math.atan2(pdir.y,pdir.x),a1=Math.atan2(snake[0].y-(prev[0]||snake[0]).y,snake[0].x-(prev[0]||snake[0]).x);let da=a1-a0;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;ctx.rotate(a0+da*Math.min(1,k*1.6));
+  const h=P[0],cxh=(h.x+.5)*px,cyh=(h.y+.5)*px;ctx.save();ctx.translate(cxh,cyh);let ta=Math.atan2(nd.y,nd.x),da=ta-headA;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;headA+=da*.45;ctx.rotate(headA);
   ctx.fillStyle='#12102b';rr(px*.02,-px*.32,px*.28,px*.24,3);ctx.fill();rr(px*.02,px*.08,px*.28,px*.24,3);ctx.fill();ctx.fillRect(px*.1,-px*.1,px*.06,px*.2);
   if(t%40<20){ctx.fillStyle='#ff4f6d';ctx.fillRect(px*.48,-px*.04,px*.22,px*.08)}
   ctx.restore();
